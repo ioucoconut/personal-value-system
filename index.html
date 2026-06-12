@@ -45,6 +45,12 @@
         baseUrl: 'https://dashscope.aliyuncs.com/api/text/chat', modelName: 'qwen-max', format: 'qwen' }
     ];
 
+    // ⚠️ AI API 配置区 - 开发者预置
+    const AI_CONFIG = {
+      modelId: 'glm',     // 默认使用的模型：claude, glm, deepseek, openai, gemini, qwen
+      apiKey: '6211300a12084531a664ea7a50f79d86.fh9sJXUgPqQ8yheD'          // 对应模型的 API Key（例如 GLM 的 sk-xxx...）
+    };
+
     // Local Storage Utils
     const LocalStorage = {
       get: (k, d) => { try { const i = localStorage.getItem(k); return i ? JSON.parse(i) : d; } catch { return d; } },
@@ -660,7 +666,14 @@
     // Main App
     function App() {
       const [section, setSection] = useState('daily');
-      const [aiConfig, setAiConfig] = useState(LocalStorage.get('ai_config', null));
+      // 优先使用开发者预置的 AI 配置，回退到本地存储
+      const getDefaultAiConfig = () => {
+        if (AI_CONFIG.apiKey) {
+          return { modelId: AI_CONFIG.modelId, apiKey: AI_CONFIG.apiKey };
+        }
+        return LocalStorage.get('ai_config', null);
+      };
+      const [aiConfig, setAiConfig] = useState(getDefaultAiConfig());
       const [showApiModal, setShowApiModal] = useState(false);
       const [showSupabaseModal, setShowSupabaseModal] = useState(false);
       const [user, setUser] = useState(null);
@@ -687,7 +700,8 @@
       }, []);
 
       useEffect(() => {
-        if (!aiConfig) setShowApiModal(true);
+        // 如果开发者没有预置 API Key，才显示配置模态框
+        if (!aiConfig && !AI_CONFIG.apiKey) setShowApiModal(true);
       }, []);
 
       const handleLogin = (loggedUser) => {
