@@ -34,7 +34,7 @@
         baseUrl: 'https://api.anthropic.com/v1/messages', modelName: 'claude-sonnet-4-20250514',
         headers: { 'anthropic-version': '2023-06-01' }, format: 'anthropic' },
       { id: 'glm', name: 'GLM', provider: '智谱AI',
-        baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', modelName: 'glm-4', format: 'openai' },
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', modelName: 'glm-4'},
       { id: 'deepseek', name: 'DeepSeek', provider: '深度求索',
         baseUrl: 'https://api.deepseek.com/v1/chat/completions', modelName: 'deepseek-chat', format: 'openai' },
       { id: 'openai', name: 'OpenAI', provider: 'OpenAI',
@@ -154,9 +154,17 @@
         body = { model: model.modelName, input: { messages: [{ role: 'user', content: prompt }] } };
       }
 
+      console.log('🚀 发送AI请求:', { url, model: model.modelName, format: model.format });
       const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(`API错误: ${res.status}`);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('❌ API请求失败:', { status: res.status, error: errorText });
+        throw new Error(`API错误: ${res.status} - ${errorText}`);
+      }
+      
       const data = await res.json();
+      console.log('✅ API响应:', data);
       
       if (model.format === 'anthropic') return data.content?.[0]?.text;
       if (model.format === 'openai') return data.choices?.[0]?.message?.content;
