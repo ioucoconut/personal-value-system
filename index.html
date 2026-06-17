@@ -34,7 +34,7 @@
         baseUrl: 'https://api.anthropic.com/v1/messages', modelName: 'claude-sonnet-4-20250514',
         headers: { 'anthropic-version': '2023-06-01' }, format: 'anthropic' },
       { id: 'glm', name: 'GLM', provider: '智谱AI',
-        baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', modelName: 'glm-4'},
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', modelName: 'glm-4', format: 'openai' },
       { id: 'deepseek', name: 'DeepSeek', provider: '深度求索',
         baseUrl: 'https://api.deepseek.com/v1/chat/completions', modelName: 'deepseek-chat', format: 'openai' },
       { id: 'openai', name: 'OpenAI', provider: 'OpenAI',
@@ -48,7 +48,7 @@
     // ⚠️ AI API 配置区 - 开发者预置
     const AI_CONFIG = {
       modelId: 'glm',     // 默认使用的模型：claude, glm, deepseek, openai, gemini, qwen
-      apiKey: 'e7c5b71f3d404f93a39fbe08b57ba7fd.SqfgvDMOXmHZPue0'          // 对应模型的 API Key（例如 GLM 的 sk-xxx...）
+      apiKey: ''          // API Key 已移至后端管理
     };
 
     // Local Storage Utils
@@ -72,6 +72,7 @@
       
       // 优先使用代码中预置的配置
       if (SUPABASE_CONFIG.url && SUPABASE_CONFIG.key) {
+        console.log('🚀 初始化 Supabase:', { url: SUPABASE_CONFIG.url, key: SUPABASE_CONFIG.key.substring(0, 20) + '...' });
         supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
         return supabaseClient;
       }
@@ -90,10 +91,13 @@
       init(u) { this.supabase = getSupabase(); this.user = u; },
       
       async get(key, def = null) {
+        console.log('📦 Storage.get:', { key, user: this.user?.id, supabase: !!this.supabase });
         if (this.user && this.supabase) {
           try {
             if (key === 'entries') {
+              console.log('🔄 从 Supabase 获取 entries...');
               const { data, error } = await this.supabase.from('entries').select('*').eq('user_id', this.user.id).order('date', { ascending: false });
+              console.log('📊 Supabase 响应:', { data: data?.length, error });
               if (!error && data) return data.map(e => ({ ...e, tags: e.tags || [], strengths: e.strengths || [], analysis: e.analysis || null }));
             } else if (key === 'aggregation') {
               const { data, error } = await this.supabase.from('aggregation').select('*').eq('user_id', this.user.id).single();
@@ -133,44 +137,28 @@
 
     // API Service
     const callAI = async (cfg, prompt) => {
-      const model = AI_MODELS.find(m => m.id === cfg.modelId);
-      if (!model || !cfg.apiKey) throw new Error('AI配置未完成');
-
-      const headers = { 'Content-Type': 'application/json', ...model.headers };
-      let url = model.baseUrl;
-      let body = {};
-
-      if (model.format === 'anthropic') {
-        headers['x-api-key'] = cfg.apiKey;
-        body = { model: model.modelName, max_tokens: 2048, messages: [{ role: 'user', content: prompt }] };
-      } else if (model.format === 'openai') {
-        headers['Authorization'] = `Bearer ${cfg.apiKey}`;
-        body = { model: model.modelName, max_tokens: 2048, messages: [{ role: 'user', content: prompt }] };
-      } else if (model.format === 'gemini') {
-        url = `${model.baseUrl}?key=${cfg.apiKey}`;
-        body = { contents: [{ parts: [{ text: prompt }] }] };
-      } else if (model.format === 'qwen') {
-        headers['Authorization'] = `Bearer ${cfg.apiKey}`;
-        body = { model: model.modelName, input: { messages: [{ role: 'user', content: prompt }] } };
-      }
-
-      console.log('🚀 发送AI请求:', { url, model: model.modelName, format: model.format });
-      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+      // 使用 Vercel 部署的后端
+      const url = 'https://success-diary-eta.vercel.app/api/chat';
       
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('❌ API请求失败:', { status: res.status, error: errorText });
-        throw new Error(`API错误: ${res.status} - ${errorText}`);
-      }
+      console.log('🚀 发送请求给 Vercel 后端...');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: cfg.modelId,
+          prompt: prompt
+        })
+      });
       
       const data = await res.json();
-      console.log('✅ API响应:', data);
       
-      if (model.format === 'anthropic') return data.content?.[0]?.text;
-      if (model.format === 'openai') return data.choices?.[0]?.message?.content;
-      if (model.format === 'gemini') return data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (model.format === 'qwen') return data.output?.text;
-      return '';
+      if (!res.ok) {
+        console.error('❌ 后端返回错误:', data.error);
+        throw new Error(`后端错误: ${data.error}`);
+      }
+      
+      console.log('✅ 收到后端解析好的结果:', data.text);
+      return data.text;
     };
 
     // Auth Page
